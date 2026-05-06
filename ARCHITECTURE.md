@@ -1,121 +1,44 @@
-# Game Boy Advance Emulator Architecture
+# Game Boy Emulator Architecture
 
 ## Goal
 
-Build a Game Boy Advance emulator in Rust with a terminal-oriented frontend, while keeping the emulation core clean enough to support debugging tools and alternate frontends later.
+Build a Game Boy emulator in Rust with a terminal-oriented frontend, while keeping the emulation core clean enough to support debugging tools and alternate frontends later.
 
-The main architectural constraint is that terminal rendering is a presentation problem, not an emulation problem. The emulator should therefore be designed as:
+The main constraint is that terminal rendering is a presentation problem, not an emulation problem. The emulator should therefore be designed as:
 
 - a hardware emulation core
 - a frontend layer for terminal I/O and visualization
 
-This keeps the core reusable and avoids mixing terminal-specific compromises into CPU, memory, timing, or graphics logic.
+This keeps the core reusable and avoids mixing terminal-specific compromises into CPU, timing, memory, graphics, or input logic.
 
 ## Recommended Direction
 
-The recommended design is:
+Use an accuracy-oriented core with a debugger-first terminal interface, then add a gameplay-oriented terminal renderer later.
 
-- an accuracy-oriented emulation core
-- a debugger-first terminal interface
-- a gameplay-oriented terminal renderer added later
+This gives you the cleanest path:
 
-This balances learning value, maintainability, and long-term correctness. It also avoids the common mistake of over-investing in rendering before the CPU, memory map, and timing model are stable.
+- stable subsystem boundaries
+- cycle-based execution from the start
+- easier debugging
+- room to improve rendering without rewriting the core
 
 ## Design Options
 
 ### Option 1: Accuracy-First Core
 
-This is the recommended architecture.
-
-Core ideas:
-
-- represent the hardware explicitly
-- execute CPU instructions with cycle accounting
-- drive peripherals from elapsed cycles
-- model memory access through a central bus
-
-Benefits:
-
-- scales well as the emulator grows
-- supports proper timing-sensitive behavior
-- makes debugging easier because subsystem boundaries are clear
-- allows multiple frontends without changing core logic
-
-Costs:
-
-- slower initial progress
-- requires more up-front structure
-
-This option is the best base if the project is meant to become a real emulator rather than a short prototype.
+Represent the hardware explicitly, execute instructions with cycle accounting, and advance the rest of the machine from elapsed cycles.
 
 ### Option 2: Frame-Oriented Prototype
 
-This design runs the CPU in larger chunks and updates devices at frame boundaries or coarse checkpoints.
-
-Benefits:
-
-- fast to prototype
-- easier to get visible output quickly
-
-Costs:
-
-- poor fit for GBA timing behavior
-- harder to retrofit correctness later
-- DMA, IRQ, waitstates, timers, and video timing become awkward
-
-This option is useful only if the immediate goal is experimentation and not long-term correctness.
+Run the CPU in larger chunks and update hardware less precisely, which is faster to prototype but weaker for correctness.
 
 ### Option 3: Headless Emulator with TUI Debugger
 
-This option emphasizes observability first. Instead of trying to make games playable immediately, the first frontend is a terminal debugger.
-
-Typical views:
-
-- CPU registers and flags
-- disassembly around the program counter
-- memory viewer
-- interrupt state
-- DMA and timer state
-- logs and breakpoints
-- small framebuffer preview later
-
-Benefits:
-
-- ideal for learning and diagnosing bugs
-- terminal-native from the beginning
-- much easier to validate than a fully playable interface
-
-Costs:
-
-- not immediately game-focused
-- requires some tooling work before visual payoff
-
-This is not a replacement for the core design. It is a frontend strategy that pairs well with Option 1.
+Use a terminal debugger as the first frontend, which is strong for visibility and learning but not aimed at immediate playability.
 
 ### Option 4: Terminal Graphics Frontend
 
-This is the path for actually displaying games in a terminal.
-
-The core still renders into a normal GBA framebuffer. The frontend converts that framebuffer into terminal output.
-
-Possible rendering approaches:
-
-- ANSI truecolor plus Unicode half blocks
-- braille character rendering
-- sixel graphics
-- kitty graphics protocol
-
-Benefits:
-
-- preserves a clean emulator core
-- allows multiple terminal rendering modes
-
-Costs:
-
-- output quality varies a lot by terminal
-- input latency and refresh behavior may be inconsistent
-
-This should be added only after the core can already produce a correct framebuffer.
+Render the Game Boy framebuffer into terminal output, which preserves good layering but should come after the core is stable.
 
 ## Recommended Combined Approach
 
@@ -125,11 +48,7 @@ Use:
 - Option 3 for the first frontend
 - Option 4 later for terminal gameplay output
 
-This gives a clean separation of concerns:
-
-- core handles hardware emulation
-- debugger frontend helps development
-- renderer frontend handles user-facing display
+This keeps hardware emulation, debugging, and presentation cleanly separated.
 
 ## Architectural Principles
 
@@ -146,22 +65,21 @@ The core should expose state and APIs that a frontend can consume.
 
 ### 2. Centralize Memory Access
 
-All hardware-visible reads and writes should flow through a bus or memory interface.
+All hardware-visible reads and writes should flow through a bus.
 
-This is important because many GBA components are memory-mapped, including:
+The bus is where you enforce:
 
-- VRAM and palette RAM
-- I/O registers
-- timers
-- DMA control
-- interrupt registers
-- cartridge ROM and SRAM/Flash
+- address decoding
+- access width
+- memory region behavior
+- I/O register side effects
+- timing rules later
 
-If subsystems bypass the bus too freely, correctness becomes difficult to reason about.
+If those rules are spread across CPU, timer, PPU, DMA, and cartridge code, correctness becomes much harder to verify.
 
 ### 3. Advance Time Explicitly
 
-Time should be represented in cycles, not implicit "updates."
+Time should be represented in cycles, not vague updates.
 
 At minimum:
 
@@ -169,32 +87,32 @@ At minimum:
 - instruction returns cycles consumed
 - other hardware advances using those cycles
 
-This is the foundation for making timers, interrupts, DMA, and video timing behave coherently.
+This is the foundation for timers, PPU timing, interrupts, DMA, and input behavior.
 
 ### 4. Separate Orchestration from Device Logic
 
 Each subsystem should own its own behavior, but one top-level machine object should coordinate execution.
 
-The top-level machine can decide:
+The top-level machine decides:
 
 - when to run CPU
 - when to tick timers
-- when DMA should preempt
-- when scanlines or frames complete
+- when to advance the PPU
+- when DMA runs
 - when interrupts become pending
 
-This avoids scattering global control flow across many modules.
+This avoids scattering global control flow across many files.
 
 ### 5. Prefer Observable State
 
-Since this project will likely be debugged heavily in the terminal, it is worth designing state so it can be inspected cleanly.
+The emulator will need a lot of debugging, so state should be easy to inspect.
 
 Examples:
 
-- register values should be easy to dump
-- CPU mode and flags should be explicit
+- registers should be easy to dump
+- flags should be explicit
 - memory regions should be named
-- scheduler or event state should be visible
+- interrupt and timer state should be visible
 
 ## Proposed Module Layout
 
@@ -205,28 +123,17 @@ src/
   main.rs
   core/
     mod.rs
-    gba.rs
+    game_boy.rs
     bus.rs
     memory.rs
-    scheduler.rs
     cartridge.rs
-    cpu/
-      mod.rs
-      arm.rs
-      thumb.rs
-      registers.rs
-      status.rs
-    ppu/
-      mod.rs
-      framebuffer.rs
-    apu/
-      mod.rs
-    dma/
-      mod.rs
-    timers/
-      mod.rs
-    interrupts/
-      mod.rs
+    cpu.rs
+    ppu.rs
+    apu.rs
+    dma.rs
+    timers.rs
+    interrupts.rs
+    joypad.rs
   frontend/
     mod.rs
     tui.rs
@@ -235,9 +142,34 @@ src/
 
 This exact structure is optional, but the separation is important.
 
+## Module Boundaries
+
+Set the project up so each subsystem has one clear owner and one clear place to live. The point is to keep the emulator understandable as it grows.
+
+Module intent:
+
+- `cpu`: owns instruction execution, registers, flags, and interrupt entry behavior
+- `bus`: owns all hardware-visible reads and writes and routes addresses to the correct target
+- `memory`: owns raw storage for WRAM, VRAM, OAM, HRAM, and other basic memory regions
+- `cartridge`: owns ROM loading, MBC behavior, external RAM, and cartridge metadata
+- `interrupts`: owns IF, IE, IME, pending interrupt state, and interrupt signaling
+- `timers`: owns DIV, TIMA, TMA, TAC, timer stepping, and overflow behavior
+- `dma`: owns OAM DMA behavior and transfer state
+- `ppu`: owns LCD timing, video registers, scanline state, and framebuffer generation
+- `apu`: owns audio state and channel behavior
+- `joypad`: owns button state and joypad register behavior
+- `frontend`: owns terminal UI, debugger views, input mapping, and framebuffer presentation
+
+First pass expectation:
+
+- create the modules
+- give each module a placeholder type
+- let `GameBoy` or `Machine` own them
+- do not force completeness before the structure is in place
+
 ## Core Subsystems
 
-### `Gba` or `Machine`
+### `GameBoy` or `Machine`
 
 Top-level emulator state.
 
@@ -257,20 +189,19 @@ Possible API shape:
 
 ### CPU
 
-The GBA uses an ARM7TDMI core with ARM and THUMB modes.
+The Game Boy CPU is the Sharp SM83 family, often described as LR35902-like.
 
 CPU responsibilities:
 
-- registers and banked registers
-- CPSR and SPSR handling
+- registers and flags
 - fetch, decode, execute
-- mode switching
-- exception entry
+- interrupt entry
+- halt and stop behavior later
 - cycle reporting
 
 Important design decision:
 
-- keep instruction execution logic separate from memory ownership
+- keep instruction execution separate from memory ownership
 - use the bus for instruction fetches and data access
 
 ### Bus
@@ -280,73 +211,80 @@ The bus is the central routing layer for reads and writes.
 Responsibilities:
 
 - map addresses to memory regions
-- enforce region behavior
 - route I/O register access
-- model waitstate behavior later
-
-This should become the single source of truth for observable memory access.
+- enforce region behavior
+- become the single source of truth for observable memory access
 
 ### Memory
 
-Represent the major GBA regions explicitly:
+Represent the major Game Boy memory regions explicitly:
 
-- BIOS
-- EWRAM
-- IWRAM
-- palette RAM
 - VRAM
+- WRAM
 - OAM
-- I/O registers
-- cartridge ROM
-- save memory
+- HRAM
+- I/O register space
 
-This can begin as plain arrays or vectors with simple bounds logic.
+Cartridge ROM and external RAM should usually live under the cartridge subsystem, even if the bus exposes them.
 
-### PPU
+### Cartridge
 
-The renderer should generate a normal framebuffer independent of terminal presentation.
+Cartridge behavior matters early on because many games depend on MBC logic.
 
 Responsibilities:
 
-- scanline timing
-- background/object rendering
-- palette lookup
-- framebuffer output
-- VBlank/HBlank signaling later
+- ROM loading
+- cartridge header parsing
+- MBC selection
+- ROM banking
+- RAM banking
+- save-backed memory behavior later
 
-Do not tie this directly to ANSI output or terminal character cells.
+### PPU
+
+The PPU should generate a normal framebuffer independent of terminal presentation.
+
+Responsibilities:
+
+- LCD timing modes
+- scanline progression
+- background and window rendering
+- sprite rendering
+- palette application
+- framebuffer output
+- VBlank and STAT interrupt conditions
+
+Do not tie this directly to terminal output.
 
 ### APU
 
-Audio can be stubbed initially, but the subsystem should still exist as a boundary.
+Audio can be stubbed at first, but the boundary is still useful.
 
 Responsibilities later:
 
 - channel state
-- FIFO audio
-- timer-linked sample generation
+- mixer behavior
+- register-backed audio state
 
 ### DMA
 
-DMA is important on GBA and affects correctness more than many first implementations expect.
+For the original Game Boy, the main DMA concern early on is OAM DMA.
 
 Responsibilities:
 
-- channel control
-- trigger conditions
-- transfer execution
-- IRQ generation
-
-DMA should eventually integrate closely with timing and bus access rules.
+- DMA trigger behavior
+- OAM copy execution
+- bus interaction rules during transfer later
 
 ### Timers
 
 Responsibilities:
 
-- increment counters based on cycles
-- handle cascades
-- trigger interrupts
-- support audio timing interactions later
+- DIV progression
+- TIMA increment behavior
+- TMA reload behavior
+- TAC control bits
+- timer interrupt generation
 
 ### Interrupts
 
@@ -354,21 +292,19 @@ Keep interrupt state centralized.
 
 Responsibilities:
 
-- IME / IE / IF behavior
+- IF / IE / IME behavior
 - pending interrupt evaluation
 - CPU interrupt signaling
 
-### Scheduler
+### Joypad
 
-You may or may not need an explicit scheduler early, but the concept is useful.
+Input is part of the hardware model, not just the frontend.
 
-Possible responsibilities:
+Responsibilities:
 
-- track the next hardware event
-- advance devices efficiently
-- coordinate timed subsystem changes
-
-Early versions can be simple. Over time, a scheduler helps avoid ad hoc timing logic spread everywhere.
+- button state
+- joypad register behavior
+- interrupt triggering when input changes
 
 ## Frontend Strategy
 
@@ -399,9 +335,9 @@ Once the PPU can produce a framebuffer, provide a minimal visualization path.
 
 Simplest route:
 
-- scale down the framebuffer
-- map pixels to ANSI truecolor
-- use Unicode half blocks for vertical density
+- scale or map the framebuffer to terminal cells
+- use ANSI grayscale or limited color
+- use Unicode half blocks for better density
 
 This is useful for validation even if it is not yet comfortable for full gameplay.
 
@@ -412,7 +348,7 @@ After the emulator is stable enough, improve presentation:
 - double buffering
 - partial redraws
 - terminal capability detection
-- sixel or kitty graphics support if desired
+- optional enhanced graphics protocols later
 
 ## Development Sequence
 
@@ -432,39 +368,41 @@ Do not build terminal graphics yet.
 Build:
 
 - fetch/decode/execute loop
-- ARM and THUMB mode handling
 - flags and branch behavior
-- cycle return per instruction
+- instruction timing return values
+- interrupt check points
 
 At this stage, correctness matters more than breadth.
 
-### Stage 3: ROM and BIOS Loading
+### Stage 3: ROM Loading and Cartridge Behavior
 
 Build:
 
-- BIOS loading
-- cartridge ROM loading
-- reset/startup flow
+- ROM loading
+- cartridge header parsing
+- no-MBC support first
+- MBC1 later
 
-This enables meaningful execution and early debugging.
+This enables meaningful execution quickly.
 
-### Stage 4: Interrupts, Timers, and DMA
+### Stage 4: Timers, Interrupts, and DMA
 
 Build:
 
-- timer registers and counting
+- DIV/TIMA/TMA/TAC
 - interrupt controller
-- DMA channels
+- OAM DMA
 
-This is where the architecture will start paying off.
+This is where cycle accounting starts paying off.
 
 ### Stage 5: PPU and Framebuffer
 
 Build:
 
-- scanline timing
+- LCD timing
+- scanline progression
 - framebuffer generation
-- basic display modes first
+- basic background rendering first
 
 Treat framebuffer production as a core responsibility and terminal display as a separate step.
 
@@ -473,7 +411,7 @@ Treat framebuffer production as a core responsibility and terminal display as a 
 Build:
 
 - register view
-- disassembly view
+- disassembly or instruction trace view
 - memory inspector
 - stepping controls
 
@@ -495,10 +433,11 @@ This kind of project is difficult to debug without tight feedback loops.
 
 Useful testing layers:
 
-- unit tests for bit manipulation and decode logic
+- unit tests for bit manipulation and flag logic
 - CPU instruction tests
 - memory map tests
 - timer and interrupt tests
+- cartridge banking tests
 - golden tests for known execution traces
 
 Also useful:
@@ -517,7 +456,7 @@ If terminal rendering code reaches into emulator internals directly, the design 
 
 ### Ignoring Timing Until Later
 
-GBA behavior depends heavily on timing. Even if timing starts simplified, the architecture should leave room for cycle-based execution.
+Even on the original Game Boy, timing matters. The architecture should leave room for cycle-based execution from the start.
 
 ### Over-Building the Renderer First
 
@@ -533,7 +472,7 @@ A good first milestone is not "run games in the terminal."
 
 A better first milestone is:
 
-- load BIOS and ROM
+- load a ROM
 - execute instructions
 - inspect CPU state in a simple terminal interface
 - produce deterministic logs while stepping
@@ -550,4 +489,4 @@ Recommended path:
 - debugger-first terminal workflow
 - framebuffer-to-terminal rendering later
 
-That design gives the best combination of correctness, visibility, and maintainability for a GBA emulator project in Rust.
+That design gives the best combination of correctness, visibility, and maintainability for a Game Boy emulator project in Rust.
