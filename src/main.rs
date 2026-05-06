@@ -1,3 +1,8 @@
+//! Entry point for the emulator binary.
+//!
+//! This crate is currently organized around two top-level concerns:
+//! emulation in `core` and user interaction in `frontend`.
+
 mod core;
 mod frontend;
 
