@@ -40,6 +40,35 @@ pub struct GameBoy {
     timers: Timers,
 }
 
+#[derive(Debug)]
+pub enum Button {
+    Up,
+    Down,
+    Left,
+    Right,
+    A,
+    B,
+    Start,
+    Select,
+}
+
+impl std::fmt::Display for Button {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Button::Up => "Up",
+            Button::Down => "Down",
+            Button::Left => "Left",
+            Button::Right => "Right",
+            Button::A => "A",
+            Button::B => "B",
+            Button::Start => "Start",
+            Button::Select => "Select",
+        };
+
+        write!(f, "{name}")
+    }
+}
+
 impl GameBoy {
     /// Creates a new machine with placeholder subsystem state.
     pub fn new() -> Self {
@@ -53,5 +82,21 @@ impl GameBoy {
             ppu: PPU::new(),
             timers: Timers::new(),
         }
+    }
+
+    pub fn step_instruction() {
+        println!("Step instruction");
+    }
+
+    pub fn step_frame() {
+        println!("Step frame");
+    }
+
+    pub fn framebuffer() {
+        println!("Framebuffer");
+    }
+
+    pub fn set_button(button: Button, pressed: bool) {
+        println!("{button} is pressed ? {pressed}")
     }
 }

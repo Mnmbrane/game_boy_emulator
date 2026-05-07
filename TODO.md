@@ -7,8 +7,8 @@ Build a minimal but well-structured emulator core that can load a ROM, execute i
 ## Phase 0: Project Setup
 
 - [x] Decide and document the source tree layout before adding many files
-- [ ] Create core module boundaries for CPU, bus, memory, cartridge, interrupts, timers, DMA, PPU, joypad, APU, and frontend
-- [ ] Add a short crate-level description to explain the project direction
+- [x] Create core module boundaries for CPU, bus, memory, cartridge, interrupts, timers, DMA, PPU, joypad, APU, and frontend
+- [x] Add a short crate-level description to explain the project direction
 - [ ] Decide early whether to keep everything in one crate or split into `core` and `frontend` crates later
 - [ ] Add a basic error type or error strategy for ROM loading and invalid machine state
 
