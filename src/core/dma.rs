@@ -11,4 +11,12 @@ impl DMA {
     pub fn new() -> Self {
         Self
     }
+
+    /// Returns the value of a DMA-mapped register.
+    pub fn read8(&self, _addr: u16) -> u8 {
+        0xFF
+    }
+
+    /// Applies a write that may configure or trigger DMA behavior.
+    pub fn write8(&mut self, _addr: u16, _value: u8) {}
 }

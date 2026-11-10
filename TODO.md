@@ -9,16 +9,39 @@ Build a minimal but well-structured emulator core that can load a ROM, execute i
 - [x] Decide and document the source tree layout before adding many files
 - [x] Create core module boundaries for CPU, bus, memory, cartridge, interrupts, timers, DMA, PPU, joypad, APU, and frontend
 - [x] Add a short crate-level description to explain the project direction
-- [ ] Decide early whether to keep everything in one crate or split into `core` and `frontend` crates later
-- [ ] Add a basic error type or error strategy for ROM loading and invalid machine state
+- [x] Decide early whether to keep everything in one crate or split into `core` and `frontend` crates later
 
 ## Phase 1: Machine Skeleton
 
-- [ ] Create a top-level `GameBoy` or `Machine` struct
-- [ ] Add machine-owned subsystems as fields, even if some are stubs initially
+- [x] Create a top-level `GameBoy` or `Machine` struct
+- [x] Add machine-owned subsystems as fields, even if some are stubs initially
+- [x] Ensure `GameBoy` owns every planned hardware subsystem (`cpu`, `bus`, `memory`, `cartridge`, `interrupts`, `timers`, `dma`, `ppu`, `joypad`, `apu`) and document any temporary omissions
+- [x] Add `joypad` and `apu` module boundaries so the machine layout matches the long-term hardware split
+- [x] Decide whether the bus owns references to other subsystems or remains a pure routing façade until later
+  - x|
+- [ ] Decide whether reset state lives in `GameBoy::new`, a separate `reset`, or both
+- [ ] Define a machine construction path
+- [ ] Keep `GameBoy::new()` as a valid no-ROM boot path for scaffolding and tests
+- [ ] Add a machine constructor or loader path that accepts cartridge/ROM input
+- [ ] Decide whether invalid machine construction should return `Result`
 - [ ] Define high-level stepping APIs such as instruction stepping and frame stepping
+- [ ] Change placeholder stepping methods to real `&mut self` APIs
+- [ ] Make instruction stepping return cycle counts
+- [ ] Define what `step_frame` means before the PPU exists fully
+- [ ] Decide whether to expose `step_cycles` or keep cycle stepping internal to the machine
 - [ ] Decide what public state access the frontend and debugger should use
+- [ ] Add read-only machine inspection APIs instead of exposing subsystem internals directly
+- [ ] Decide which state gets dedicated accessors versus debug snapshot structs
+- [ ] Define how framebuffer access should work before real rendering exists
+- [ ] Decide whether debugger reads should come from `GameBoy` directly or a separate view type
 - [ ] Keep frontend concerns out of the machine core
+- [ ] Remove placeholder `println!` behavior from core-facing APIs
+- [ ] Keep terminal formatting, input handling, and command parsing out of `core`
+- [ ] Avoid letting the frontend mutate subsystem fields directly
+- [ ] Add machine-level invariants
+- [ ] Keep cross-subsystem stepping orchestration in `GameBoy`, not in `main.rs`
+- [ ] Ensure CPU, timers, DMA, interrupts, and PPU advance through a single orchestration path
+- [ ] Document which subsystem interactions are intentionally stubbed in phase 1
 
 ## Phase 2: CPU Foundation
 

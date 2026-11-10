@@ -20,8 +20,10 @@ mod frontend;
 use crate::core::GameBoy;
 use crate::frontend::Frontend;
 
-fn main() {
-    println!("Hello, world!");
-    let game_boy = GameBoy::new();
-    let frontend = Frontend::new();
+fn main() -> std::io::Result<()> {
+    let mut game_boy = GameBoy::new();
+    let mut frontend = Frontend::new();
+    frontend.run(&mut game_boy)?;
+
+    Ok(())
 }
